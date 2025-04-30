@@ -7,7 +7,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 # Bot config
-BOT_TOKEN = '8035963417:AAHUyA7CRuf2lX3MHm5-kfouetyODFlj8z8'
+BOT_TOKEN = os.getenv('8035963417:AAHUyA7CRuf2lX3MHm5-kfouetyODFlj8z8')
 API_URL = "https://gmg-id-like.vercel.app/like"
 USAGE_FILE = "like_usage.json"
 GROUP_STATUS_FILE = "group_status.json"
@@ -160,175 +160,12 @@ async def like(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"[ERROR] like command failed: {e}")
         await temp_msg.edit_text("❌ An error occurred while sending likes.")
-
-async def remain(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    if not is_group_active(chat_id):
-        return
-
-    usage = load_usage()
-    user_id = str(update.message.from_user.id)
-    group_limit = get_group_limit(chat_id)
-
-    group_remaining = group_limit - usage.get("total_count", 0)
-    user_remaining = "GMG" if user_id == UNLIMITED_USER_ID else USER_DAILY_LIMIT - usage["users"].get(user_id, 0)
-
-    await update.message.reply_text(
-        f"📊 *Your LIMIT Likes:* {user_remaining}/{USER_DAILY_LIMIT}\n"
-        f"👥 *Group Limit Likes:* {group_remaining}/{group_limit}",
-        parse_mode="Markdown"
-    )
-
-async def boton(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.message.from_user.id)
-    chat_id = str(update.effective_chat.id)
-    if user_id != UNLIMITED_USER_ID:
-        await update.message.reply_text("❌ You are not authorized to use this command.")
-        return
-
-    status = load_group_status()
-    if str(chat_id) not in status:
-        status[str(chat_id)] = {
-            "active": True,
-            "limit": DEFAULT_DAILY_LIMIT,
-            "expires": "2099-12-31"
-        }
-    else:
-        status[str(chat_id)]["active"] = True
-    save_group_status(status)
-    await update.message.reply_text("✅ Bot is now ON for this group.")
-
-async def botoff(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.message.from_user.id)
-    chat_id = str(update.effective_chat.id)
-    if user_id != UNLIMITED_USER_ID:
-        await update.message.reply_text("❌ You are not authorized to use this command.")
-        return
-
-    status = load_group_status()
-    if str(chat_id) in status:
-        status[str(chat_id)]["active"] = False
-        save_group_status(status)
-        await update.message.reply_text("❌ Bot is now OFF for this group.")
-    else:
-        await update.message.reply_text("⚠️ Group not found in status file.")
-
-async def allow(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.message.from_user.id)
-    if user_id != UNLIMITED_USER_ID:
-        await update.message.reply_text("❌ You are not authorized to use this command.")
-        return
-
-    if len(context.args) != 3:
-        await update.message.reply_text("❗ Usage: /allow <chat_id> <limit> <days>")
-        return
-
-    chat_id, limit_str, days_str = context.args
-
-    try:
-        limit = int(limit_str)
-        days = int(days_str.lower().replace("days", ""))
-    except ValueError:
-        await update.message.reply_text("❌ Invalid limit or days format.")
-        return
-
-    expiry_date = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
-    status = load_group_status()
-    status[chat_id] = {
-        "active": True,
-        "limit": limit,
-        "expires": expiry_date
-    }
-    save_group_status(status)
-    await update.message.reply_text(f"✅ Allowed group {chat_id} with {limit} likes/day until {expiry_date}.")
-
-async def unallow(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.message.from_user.id)
-    if user_id != UNLIMITED_USER_ID:
-        await update.message.reply_text("❌ You are not authorized to use this command.")
-        return
-
-    if len(context.args) != 1:
-        await update.message.reply_text("❗ Usage: /unallow <chat_id>")
-        return
-
-    chat_id = context.args[0]
-    status = load_group_status()
-
-    if chat_id in status:
-        del status[chat_id]
-        save_group_status(status)
-        await update.message.reply_text(f"❌ Group {chat_id} is now unallowed and removed from access.")
-    else:
-        await update.message.reply_text(f"⚠️ Group {chat_id} not found in allowed list.")
-
-async def removeremain(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.message.from_user.id)
-
-    if user_id != UNLIMITED_USER_ID:
-        await update.message.reply_text("❌ You are not authorized to use this command.")
-        return
-
-    if len(context.args) != 2:
-        await update.message.reply_text("❗ Usage: /removeremain <group_id> <count>")
-        return
-
-    group_id = context.args[0]
-    try:
-        count = int(context.args[1])
-    except ValueError:
-        await update.message.reply_text("❌ Invalid number provided.")
-        return
-
-    status = load_group_status()
-
-    if group_id not in status:
-        await update.message.reply_text(f"⚠️ Group {group_id} not found.")
-        return
-
-    group_data = status[group_id]
-    group_data["limit"] -= count
-    if group_data["limit"] < 0:
-        group_data["limit"] = 0
-    status[group_id] = group_data
-    save_group_status(status)
-
-    await update.message.reply_text(
-        f"✅ Removed {count} from the group {group_id}'s remaining limit.\n"
-        f"🧮 New Group Limit: {group_data['limit']}"
-    )
-
-async def setfooter(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.message.from_user.id)
-    if user_id != UNLIMITED_USER_ID:
-        await update.message.reply_text("❌ You are not authorized to use this command.")
-        return
-
-    if len(context.args) < 2:
-        await update.message.reply_text("❗ Usage: /setfooter <chat_id> <footer text>")
-        return
-
-    chat_id = context.args[0]
-    footer_text = " ".join(context.args[1:])
-
-    config = load_footer_config()
-    config[chat_id] = footer_text
-    save_footer_config(config)
-
-    await update.message.reply_text(f"✅ Footer set for group {chat_id}:\n{footer_text}")
-
-# --- Main Bot Run ---
-
+        
+# Main bot run
 if __name__ == '__main__':
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("like", like))
-    app.add_handler(CommandHandler("remain", remain))
-    app.add_handler(CommandHandler("boton", boton))
-    app.add_handler(CommandHandler("botoff", botoff))
-    app.add_handler(CommandHandler("allow", allow))
-    app.add_handler(CommandHandler("unallow", unallow))
-    app.add_handler(CommandHandler("removeremain", removeremain))
-    app.add_handler(CommandHandler("setfooter", setfooter))
     print("Bot is running...")
     app.run_polling()
+        
